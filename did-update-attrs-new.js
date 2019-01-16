@@ -25,11 +25,11 @@ const { isEmpty, get } = Ember;
       this.registerDidUpdateAttrsCallback('myKeyB', this.myKeyAorBCallback); // can use the same callback for different key updates
     },
 
-    myKeysCallback(newValue) {
+    myKeysCallback(newValue, oldValue) {
       ...
     },
 
-    myKeyAorBCallback(newValue) {
+    myKeyAorBCallback(newValue, oldValue) {
       ...
     }
  * 
@@ -93,7 +93,7 @@ export default Ember.Mixin.create({
    * {attrs} has attributes that are wrapped in an object where the value is found arg.attrs.yourProperty.value
    * @param {Object} arg itterate through the attrs attribute for changes.
    */
-  didUpdateAttrs({attrs}) {
+  didUpdateAttrs() {
     this._super(...arguments);
 
     let oldRef = key => `_oldDidUpdateAttrsValues.${key}`; // reference to key
@@ -101,25 +101,26 @@ export default Ember.Mixin.create({
     let getOldRefCallback = key => this.get(`${oldRef(key)}.callback`); // get callback for key
     let getOldRefTriggerOnValue = key => this.get(`${oldRef(key)}.triggerOnValue`); // get triggerOnValue value for key
     let hasTriggerOnValue = key => (this.get(oldRef(key)) || {}).hasOwnProperty('triggerOnValue'); // do we have a specific value to trigger on
-    let propertyValue = prop => (!isEmpty(get(prop, 'value')) ? prop.value : prop); // if its an object its most likely wrapped with its target value added inside
     let isNewValueDifferent = (newValue, key) => newValue !== this.get(oldRefValue(key)); // if new value is different than older
     let isPropertyRegistered = key => !isEmpty(getOldRefCallback(key)) && getOldRefCallback(key) instanceof Function; // check if a callback is set for this key
-    let triggerRegisteredCallback = (key, newValue) => {
+    let triggerRegisteredCallback = (key, newValue, oldValue) => {
       let callback = getOldRefCallback(key);
       let newValueAllowed = hasTriggerOnValue(key) ? getOldRefTriggerOnValue(key) === newValue : true; // if value is set for this property it has to match
       if (callback instanceof Function && newValueAllowed) { // need a valid callback and newValue to be allowed
-        callback.call(this, newValue); // call method in same context since its a mixin
+        callback.call(this, newValue, oldValue); // call method in same context since its a mixin
       }
     };
     let compareAndSet = (newValue, key) => { // compare a new value with the old
       if (isPropertyRegistered(key) && isNewValueDifferent(newValue, key)) { // compare new value with the old temp value
+        let oldValue = this.get(oldRefValue(key));
         this.set(oldRefValue(key), newValue); // store new value for future comparison
-        triggerRegisteredCallback(key, newValue);
+        triggerRegisteredCallback(key, newValue, oldValue);
       }
     };
-    
-    Object.keys(attrs).forEach(key => { // compare new attrs with old temp
-      compareAndSet(propertyValue(attrs[key]), key);
+
+    let _oldDidUpdateAttrsValues = this.get('_oldDidUpdateAttrsValues');
+    Object.keys(_oldDidUpdateAttrsValues).forEach(key => { // compare new attrs with old temp
+      compareAndSet(this.get(key), key);
     });
   }
 });
